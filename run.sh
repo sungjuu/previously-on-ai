@@ -30,6 +30,11 @@ PROMPT_FILE="prompt.md"
 ts() { date "+%Y-%m-%d %H:%M:%S %Z"; }
 log() { echo "[$(ts)] $*"; }
 
+# The CLI usage report goes OUTSIDE ./out — the agent may recreate ./out during
+# its run, which would unlink a file we'd placed inside it. Keep it in /tmp.
+CLIRUN="$(mktemp "${TMPDIR:-/tmp}/poa-clirun.XXXXXX")"
+trap 'rm -f "$CLIRUN"' EXIT
+
 # 1. self-update from the public repo (a push auto-updates the next run)
 if [ "${POA_SKIP_PULL:-0}" != "1" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   git pull --ff-only --quiet 2>/dev/null && log "code: up to date with origin" \
@@ -43,7 +48,7 @@ rm -rf out && mkdir -p out
 CLAUDE_ARGS=(--print --output-format json --dangerously-skip-permissions)
 [ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")
 log "generator: starting ($([ -n "$MODEL" ] && echo "$MODEL" || echo "default model"))"
-if ! claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" > out/_clirun.json; then
+if ! claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" > "$CLIRUN"; then
   log "generator: claude run failed — not publishing" >&2
   exit 1
 fi
@@ -56,9 +61,9 @@ if [ ! -f "$ITEMS" ] || ! node "$SCRIPT_DIR/validate.js" "$ITEMS"; then
 fi
 
 # 5. merge real token/cost from the CLI usage report into cycle.json
-node -e '
+CLIRUN="$CLIRUN" node -e '
   const fs = require("fs");
-  const cli = JSON.parse(fs.readFileSync("out/_clirun.json", "utf8"));
+  const cli = JSON.parse(fs.readFileSync(process.env.CLIRUN, "utf8"));
   const u = cli.usage || {};
   const tokens = (u.input_tokens || 0) + (u.output_tokens || 0)
                + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
