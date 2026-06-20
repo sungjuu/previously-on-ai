@@ -1,0 +1,19 @@
+[Unit]
+Description=Previously on AI — daily feed generation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=poa
+Group=poa
+WorkingDirectory=/opt/previously-on-ai
+# ANTHROPIC_API_KEY (and optional POA_MODEL) live here — root:poa 640, never in git.
+EnvironmentFile=/etc/poa/env
+Environment=HOME=/home/poa
+Environment=POA_PUBLISH_DIR=/var/www/poa
+# Ensure claude / node / git are found (npm global + user-local installs).
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/poa/.local/bin
+ExecStart=/opt/previously-on-ai/run.sh
+TimeoutStartSec=1800
+Nice=10
