@@ -85,4 +85,24 @@ if [ -f out/cycle.json ]; then
 fi
 cp -f "$PUBLISH_DIR/items.json" "$PUBLISH_DIR/archive/$(date +%F).json"
 
+# 7. append this cycle to the rolling daily-usage history (one entry per date,
+#    last 60 days) — served at /data/cycle-history.json for the lab usage chart.
+if [ -f out/cycle.json ]; then
+  HIST="$PUBLISH_DIR/cycle-history.json" node -e '
+    const fs = require("fs");
+    const hist = process.env.HIST;
+    const c = JSON.parse(fs.readFileSync("out/cycle.json", "utf8"));
+    const date = (c.generated_at || new Date().toISOString()).slice(0, 10);
+    let rows = [];
+    try { const r = JSON.parse(fs.readFileSync(hist, "utf8")); if (Array.isArray(r)) rows = r; } catch (_) {}
+    rows = rows.filter(r => r.date !== date);
+    rows.push({ date, tokens_used: c.tokens_used ?? null, published: c.published ?? null, raw_seen: c.raw_seen ?? null, after_dedup: c.after_dedup ?? null });
+    rows.sort((a, b) => a.date < b.date ? -1 : 1);
+    rows = rows.slice(-60);
+    fs.writeFileSync(hist + ".tmp", JSON.stringify(rows) + "\n");
+    fs.renameSync(hist + ".tmp", hist);
+    console.log("[history] " + rows.length + " day(s)");
+  ' && chmod 644 "$PUBLISH_DIR/cycle-history.json" || log "history update skipped"
+fi
+
 log "published $(node -p 'require("./out/items.json").items.length') items → $PUBLISH_DIR/items.json"
