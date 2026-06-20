@@ -8,7 +8,8 @@ Type=oneshot
 User=poa
 Group=poa
 WorkingDirectory=/opt/previously-on-ai
-# ANTHROPIC_API_KEY (and optional POA_MODEL) live here — root:poa 640, never in git.
+# Optional knobs only (e.g. POA_MODEL) — root:poa 640, never in git. Auth is the
+# logged-in `claude auth login` session under HOME below, NOT an API key here.
 EnvironmentFile=/etc/poa/env
 Environment=HOME=/home/poa
 Environment=POA_PUBLISH_DIR=/var/www/poa

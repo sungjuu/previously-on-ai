@@ -40,16 +40,23 @@ chown -R poa:poa /opt/previously-on-ai
 chmod +x /opt/previously-on-ai/run.sh
 ```
 
-## 4. API key (not in git)
+## 4. Authenticate the agent (Claude subscription, not an API key)
+
+Log in once as `poa`; the session persists in `/home/poa/.claude` and auto-refreshes.
+The systemd unit sets `HOME=/home/poa`, so the scheduled run reuses this login.
+
+```bash
+sudo -u poa -H claude auth login      # interactive: open the URL, paste the code
+sudo -u poa -H claude auth status     # verify
+```
+
+`/etc/poa/env` is only for optional knobs (e.g. `POA_MODEL`). Do **not** put
+`ANTHROPIC_API_KEY` there — it would override the subscription session.
 
 ```bash
 mkdir -p /etc/poa
-cat > /etc/poa/env <<'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
-# optional: POA_MODEL=claude-sonnet-4-6
-EOF
-chown root:poa /etc/poa/env
-chmod 640 /etc/poa/env
+printf '# Optional: POA_MODEL=claude-sonnet-4-6\n' > /etc/poa/env
+chown root:poa /etc/poa/env && chmod 640 /etc/poa/env
 ```
 
 ## 5. systemd timer (07:00 KST daily)

@@ -53,7 +53,7 @@ concrete example.
 ## Run locally
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+claude auth login                                     # subscription session (or: export ANTHROPIC_API_KEY=sk-ant-...)
 POA_PUBLISH_DIR="$PWD/out" POA_SKIP_PULL=1 ./run.sh   # publishes into ./out instead of /var/www/poa
 ```
 

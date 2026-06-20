@@ -10,8 +10,9 @@
 # publishes to $POA_PUBLISH_DIR (default /var/www/poa, served by Caddy at /data/).
 # A bad run never empties the site — we publish only after validation passes.
 #
-# Requirements: Claude Code CLI on PATH (`claude`), authenticated via
-# ANTHROPIC_API_KEY in the environment. Node.js (for validation + JSON merge).
+# Requirements: Claude Code CLI on PATH (`claude`), authenticated — either a
+# logged-in subscription session (`claude auth login`) or ANTHROPIC_API_KEY.
+# Node.js (for validation + JSON merge).
 #
 # Env knobs:
 #   POA_PUBLISH_DIR   where to publish (default /var/www/poa)
