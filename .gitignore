@@ -1,0 +1,12 @@
+# Live run output and generated feed — NEVER committed (data stays on the server).
+out/
+
+# Secrets / local env
+.env
+*.env
+secrets/
+
+# OS / editor noise
+.DS_Store
+*.swp
+*~

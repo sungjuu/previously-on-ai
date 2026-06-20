@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Previously on AI feed generation daily at 07:00 KST
+
+[Timer]
+# systemd >= 252 supports a timezone suffix (Ubuntu 24.04 ships 255).
+OnCalendar=*-*-* 07:00:00 Asia/Seoul
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
