@@ -43,38 +43,40 @@ chmod +x /opt/previously-on-ai/run.sh
 ## 4. Authenticate the agent (Claude subscription, not an API key)
 
 Log in once as `poa`; the session persists in `/home/poa/.claude` and auto-refreshes.
-The systemd unit sets `HOME=/home/poa`, so the scheduled run reuses this login.
+Cron runs as `poa` with `HOME=/home/poa`, so the scheduled run reuses this login.
 
 ```bash
-sudo -u poa -H claude auth login      # interactive: open the URL, paste the code
-sudo -u poa -H claude auth status     # verify
+sudo -u poa -H claude auth login --claudeai   # interactive: open the URL, paste the code
+sudo -u poa -H claude auth status             # verify
 ```
 
-`/etc/poa/env` is only for optional knobs (e.g. `POA_MODEL`). Do **not** put
-`ANTHROPIC_API_KEY` there — it would override the subscription session.
+Do **not** set `ANTHROPIC_API_KEY` anywhere for this user — it would override the
+subscription session. No env file is needed; to pin a model, set `POA_MODEL` in
+the crontab below (default is the CLI's default model).
+
+## 5. Schedule it (cron, 07:00 KST daily)
+
+Install `poa`'s crontab (as root). `CRON_TZ` keeps it on Korean time even on a
+UTC host; cron runs as `poa` with `HOME=/home/poa`, so it reuses the login session.
 
 ```bash
-mkdir -p /etc/poa
-printf '# Optional: POA_MODEL=claude-sonnet-4-6\n' > /etc/poa/env
-chown root:poa /etc/poa/env && chmod 640 /etc/poa/env
+crontab -u poa - <<'CRON'
+CRON_TZ=Asia/Seoul
+PATH=/usr/local/bin:/usr/bin:/bin:/home/poa/.local/bin
+# 07:00 KST daily — regenerate and publish the feed
+0 7 * * * /opt/previously-on-ai/run.sh >> /home/poa/poa-feed.log 2>&1
+CRON
+crontab -u poa -l        # confirm
 ```
 
-## 5. systemd timer (07:00 KST daily)
-
-```bash
-cp deploy/poa-feed.service /etc/systemd/system/
-cp deploy/poa-feed.timer   /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now poa-feed.timer
-systemctl list-timers poa-feed.timer        # confirm next run
-```
+> Alternative: a systemd timer (`deploy/poa-feed.{service,timer}`) does the same —
+> `cp` them to `/etc/systemd/system/` then `systemctl enable --now poa-feed.timer`.
 
 ## 6. Test a run now (don't wait for 07:00)
 
 ```bash
-systemctl start poa-feed.service            # runs once
-journalctl -u poa-feed.service -n 50 --no-pager
-cat /var/www/poa/cycle.json                 # real tokens + cost
+sudo -u poa -H /opt/previously-on-ai/run.sh     # runs once
+cat /var/www/poa/cycle.json                     # real tokens + cost
 curl -s https://sungjukim.com/data/items.json | jq '.items | length'
 ```
 
