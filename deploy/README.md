@@ -56,21 +56,27 @@ the crontab below (default is the CLI's default model).
 
 ## 5. Schedule it (cron, 07:00 KST daily)
 
-Install `poa`'s crontab (as root). `CRON_TZ` keeps it on Korean time even on a
-UTC host; cron runs as `poa` with `HOME=/home/poa`, so it reuses the login session.
+Install `poa`'s crontab (as root); cron runs as `poa` with `HOME=/home/poa`, so it
+reuses the login session.
+
+> ⚠️ Debian/Ubuntu's cron **ignores `CRON_TZ`** — `0 7 * * *` would run at 07:00 in
+> the host timezone (UTC), not KST. Schedule in the host's timezone instead. On a
+> UTC host, **07:00 KST = 22:00 UTC** (Korea has no DST):
 
 ```bash
 crontab -u poa - <<'CRON'
-CRON_TZ=Asia/Seoul
 PATH=/usr/local/bin:/usr/bin:/bin:/home/poa/.local/bin
-# 07:00 KST daily — regenerate and publish the feed
-0 7 * * * /opt/previously-on-ai/run.sh >> /home/poa/poa-feed.log 2>&1
+POA_MODEL=claude-sonnet-4-6
+# 07:00 KST = 22:00 UTC (Korea has no DST) — regenerate and publish the feed
+0 22 * * * /opt/previously-on-ai/run.sh >> /home/poa/poa-feed.log 2>&1
 CRON
 crontab -u poa -l        # confirm
 ```
 
-> Alternative: a systemd timer (`deploy/poa-feed.{service,timer}`) does the same —
-> `cp` them to `/etc/systemd/system/` then `systemctl enable --now poa-feed.timer`.
+> Or set the box to Korean time once (`timedatectl set-timezone Asia/Seoul`) and use
+> `0 7 * * *`. Alternative: the systemd timer (`deploy/poa-feed.{service,timer}`,
+> `cp` to `/etc/systemd/system/` then `systemctl enable --now poa-feed.timer`) — its
+> `OnCalendar=… Asia/Seoul` **does** honor the timezone.
 
 ## 6. Test a run now (don't wait for 07:00)
 
