@@ -1,6 +1,12 @@
 # Live run output and generated feed — NEVER committed (data stays on the server).
 out/
 
+# Vector-dedup store — server-side data, rebuildable from archive/ via `vec.js reindex`.
+.state/
+
+# Node dependencies (cohere-ai, better-sqlite3, sqlite-vec).
+node_modules/
+
 # Secrets / local env
 .env
 *.env

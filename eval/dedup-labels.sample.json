@@ -1,0 +1,47 @@
+{
+  "_comment": "Labeled pairs for tuning POA_DEDUP_THRESHOLD. Each pair is two item texts (title\\nsummary, as embedded by vec.js) and whether they are the SAME underlying story (a cross-run duplicate). Grow this set over time from real archive/*.json + dedup-report.json decisions, then run: node vec.js eval eval/dedup-labels.sample.json",
+  "pairs": [
+    {
+      "_note": "same story, different source/wording → DUP",
+      "a": "Anthropic ships Claude Fable 5 & Mythos 5 — then they vanish\nAnthropic released two new frontier models, Fable 5 and Mythos 5, on Jun 9. Days later the models were pulled from all customers under a US export-control directive.",
+      "b": "Anthropic's new Fable 5 and Mythos 5 models pulled days after launch\nThe two frontier models Anthropic launched on June 9 were withdrawn from every customer within days, citing a US export-control order.",
+      "duplicate": true
+    },
+    {
+      "_note": "follow-up coverage of the same event → DUP",
+      "a": "Anthropic walks back invisible safeguards; then the US bans the models outright\nAfter quietly adding safeguards to Fable 5 and Mythos 5, Anthropic reversed course; the US then banned the models entirely.",
+      "b": "US government bans Anthropic's Fable 5 and Mythos 5 after safeguard reversal\nThe US has prohibited Anthropic's two newest models outright, days after the company rolled back invisibly-added safeguards.",
+      "duplicate": true
+    },
+    {
+      "_note": "same release, paraphrased → DUP",
+      "a": "Google releases DiffusionGemma — an open-weight diffusion text model\nGoogle published DiffusionGemma, an open-weight text model that generates with a diffusion process instead of left-to-right decoding.",
+      "b": "DiffusionGemma: Google's first open-weight diffusion-based language model\nGoogle has open-sourced DiffusionGemma, applying diffusion rather than autoregressive decoding to text generation.",
+      "duplicate": true
+    },
+    {
+      "_note": "two genuinely different AI stories → NOT dup",
+      "a": "Google releases DiffusionGemma — an open-weight diffusion text model\nGoogle published DiffusionGemma, an open-weight text model that generates with a diffusion process instead of left-to-right decoding.",
+      "b": "OpenAI ships GPT-Realtime-2: GPT-5-class reasoning in the voice API\nOpenAI released GPT-Realtime-2, bringing GPT-5-class reasoning to its low-latency voice API.",
+      "duplicate": false
+    },
+    {
+      "_note": "both about Anthropic models but different events → NOT dup",
+      "a": "Anthropic ships Claude Fable 5 & Mythos 5 — then they vanish\nAnthropic released two new frontier models, Fable 5 and Mythos 5, on Jun 9.",
+      "b": "OpenAI ships GPT-Realtime-2: GPT-5-class reasoning in the voice API\nOpenAI released GPT-Realtime-2, bringing GPT-5-class reasoning to its low-latency voice API.",
+      "duplicate": false
+    },
+    {
+      "_note": "both Python ecosystem but unrelated → NOT dup",
+      "a": "Pyodide 0.314 lets you publish WASM wheels to PyPI\nPyodide 0.314 adds support for building and publishing WebAssembly wheels to PyPI.",
+      "b": "Python core devs revert the incremental garbage collector in 3.14 & 3.15\nThe Python team reverted the incremental GC introduced earlier, citing regressions, in both 3.14 and 3.15.",
+      "duplicate": false
+    },
+    {
+      "_note": "same GC revert story, reworded → DUP",
+      "a": "Python core devs revert the incremental garbage collector in 3.14 & 3.15\nThe Python team reverted the incremental GC introduced earlier, citing regressions, in both 3.14 and 3.15.",
+      "b": "CPython rolls back incremental GC for 3.14 and 3.15\nCiting performance regressions, CPython maintainers have backed out the incremental garbage collector from the 3.14 and 3.15 lines.",
+      "duplicate": true
+    }
+  ]
+}
