@@ -1,0 +1,19 @@
+{
+  "name": "previously-on-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily AI ecosystem briefing agent — generation, validation, and vector-backed cross-run dedup.",
+  "type": "commonjs",
+  "scripts": {
+    "validate": "node validate.js out/items.json",
+    "dedup": "node vec.js dedup out/items.json",
+    "embed": "node vec.js embed out/items.json",
+    "reindex": "node vec.js reindex",
+    "eval": "node vec.js eval eval/dedup-labels.sample.json"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "cohere-ai": "^7.15.0",
+    "sqlite-vec": "^0.1.7-alpha.2"
+  }
+}

@@ -17,6 +17,8 @@ High-signal, PRACTICAL updates for builders across: LLM products & APIs (OpenAI,
 ## Deduplicate (important)
 Judge items by SEMANTIC similarity. If multiple sources cover the same underlying event, MERGE them into ONE card — keep the single most authoritative source_url and optionally mention the others in the summary. Never publish two cards for the same story.
 
+You only need to dedup WITHIN this run's stories — a downstream step (`vec.js`) handles cross-DAY dedup against the last ~2 weeks of already-published items, which you can't see. So don't try to guess what ran before; just collect today's best stories and merge same-event duplicates among them.
+
 ## Quantity & honesty
 Aim for 12–15 items on a normal day. On a genuinely quiet day, publish fewer (even 3–5) rather than padding — the site shows a graceful empty state, so prefer quality. Only include items you actually verified from fetched content; never invent headlines, dates, or numbers. Hedge any unverified claim in the summary.
 

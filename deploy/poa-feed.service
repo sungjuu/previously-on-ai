@@ -8,11 +8,13 @@ Type=oneshot
 User=poa
 Group=poa
 WorkingDirectory=/opt/previously-on-ai
-# Optional knobs only (e.g. POA_MODEL) — root:poa 640, never in git. Auth is the
-# logged-in `claude auth login` session under HOME below, NOT an API key here.
+# Knobs + COHERE_API_KEY (for dedup embeddings) — root:poa 640, never in git.
+# Claude auth is the logged-in `claude auth login` session under HOME below, NOT
+# an API key here.
 EnvironmentFile=/etc/poa/env
 Environment=HOME=/home/poa
 Environment=POA_PUBLISH_DIR=/var/www/poa
+Environment=POA_STATE_DIR=/var/lib/poa
 # Ensure claude / node / git are found (npm global + user-local installs).
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/poa/.local/bin
 ExecStart=/opt/previously-on-ai/run.sh

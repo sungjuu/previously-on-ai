@@ -16,16 +16,27 @@
 #
 # Env knobs:
 #   POA_PUBLISH_DIR   where to publish (default /var/www/poa)
+#   POA_STATE_DIR     where the vector-dedup store lives (default /var/lib/poa)
 #   POA_MODEL         pin a model, e.g. claude-sonnet-4-6 (default: CLI default)
 #   POA_SKIP_PULL=1   skip the self-update git pull
+#
+# Secrets (COHERE_API_KEY for the dedup embeddings) are read from ./.env if it
+# exists. Cross-run dedup degrades gracefully: if Cohere/the store is
+# unavailable, the run still validates and publishes — just without that day's
+# cross-run dedup — so it can never empty the site.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Load local secrets / overrides (COHERE_API_KEY, POA_STATE_DIR, ...) and export
+# them to the node helpers. set -a auto-exports everything sourced here.
+if [ -f "$SCRIPT_DIR/.env" ]; then set -a; . "$SCRIPT_DIR/.env"; set +a; fi
+
 PUBLISH_DIR="${POA_PUBLISH_DIR:-/var/www/poa}"
 MODEL="${POA_MODEL:-}"
 PROMPT_FILE="prompt.md"
+ITEMS=out/items.json
 
 ts() { date "+%Y-%m-%d %H:%M:%S %Z"; }
 log() { echo "[$(ts)] $*"; }
@@ -53,8 +64,14 @@ if ! claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" > "$CLIRUN"; then
   exit 1
 fi
 
+# 3b. cross-run dedup: drop candidates that match a recent published item.
+#     Mutates out/items.json (removals only, keeps source_count consistent) and
+#     records out/dedup-report.json. Soft-fails (exit 0, feed untouched) if
+#     Cohere/the store is unavailable; a hard JSON error is caught by validate next.
+log "dedup: checking candidates against the last ${POA_DEDUP_DAYS:-14}d of the store"
+node "$SCRIPT_DIR/vec.js" dedup "$ITEMS" || log "dedup: errored — continuing with the un-deduped feed"
+
 # 4. validate the feed the agent wrote
-ITEMS=out/items.json
 if [ ! -f "$ITEMS" ] || ! node "$SCRIPT_DIR/validate.js" "$ITEMS"; then
   log "VALIDATION FAILED — keeping previously published feed" >&2
   exit 1
@@ -104,5 +121,10 @@ if [ -f out/cycle.json ]; then
     console.log("[history] " + rows.length + " day(s)");
   ' && chmod 644 "$PUBLISH_DIR/cycle-history.json" || log "history update skipped"
 fi
+
+# 8. embed the now-published items into the vector store so tomorrow's run can
+#    dedup against them. Reuses vectors cached by the dedup step; soft-fails
+#    (store simply isn't updated this run) if Cohere/the store is unavailable.
+node "$SCRIPT_DIR/vec.js" embed "$ITEMS" || log "embed: store not updated this run"
 
 log "published $(node -p 'require("./out/items.json").items.length') items → $PUBLISH_DIR/items.json"
