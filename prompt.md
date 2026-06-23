@@ -23,7 +23,7 @@ You only need to dedup WITHIN this run's stories — a downstream step (`vec.js`
 Aim for 12–15 items on a normal day. On a genuinely quiet day, publish fewer (even 3–5) rather than padding — the site shows a graceful empty state, so prefer quality. Only include items you actually verified from fetched content; never invent headlines, dates, or numbers. Hedge any unverified claim in the summary.
 
 ## Schema (match ./sample-items.json exactly)
-Top level: `generated_at` (ISO8601 with +09:00, the actual run time), `source_count` (item count), `schema_version`: 2, `items`: array.
+Top level: `generated_at` (ISO8601 with +09:00 — the runner overwrites this with the real publish time, so an approximate value is fine), `source_count` (item count), `schema_version`: 2, `items`: array.
 Each item:
 - `id`: `YYYY-MM-DD-short-slug`
 - `title_en`, `title_ko`
