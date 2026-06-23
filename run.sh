@@ -19,6 +19,8 @@
 #   POA_STATE_DIR     where the vector-dedup store lives (default /var/lib/poa)
 #   POA_MODEL         pin a model, e.g. claude-sonnet-4-6 (default: CLI default)
 #   POA_SKIP_PULL=1   skip the self-update git pull
+#   POA_HEALTHCHECK_URL  dead-man's-switch ping URL (success / "$URL/fail") — alerts on failure
+#   POA_BACKUP_REMOTE    rclone target for off-server archive backup (e.g. r2:poa-backup)
 #
 # Secrets (COHERE_API_KEY for the dedup embeddings) are read from ./.env if it
 # exists. Cross-run dedup degrades gracefully: if Cohere/the store is
@@ -41,10 +43,32 @@ ITEMS=out/items.json
 ts() { date "+%Y-%m-%d %H:%M:%S %Z"; }
 log() { echo "[$(ts)] $*"; }
 
+# Optional ops hooks — no-op unless set in .env:
+#   POA_HEALTHCHECK_URL  ping this on success, "$URL/fail" on failure. Point it at a
+#                        dead-man's-switch (e.g. healthchecks.io) so a failed OR a
+#                        never-started run alerts you — the site fails silently otherwise.
+#   POA_BACKUP_REMOTE    rclone target for off-server archive backup (e.g. r2:poa-backup).
+ping_hc() {  # ping_hc [/fail]
+  [ -n "${POA_HEALTHCHECK_URL:-}" ] && command -v curl >/dev/null 2>&1 || return 0
+  curl -fsS -m 10 -o /dev/null "${POA_HEALTHCHECK_URL}${1:-}" 2>/dev/null \
+    && log "healthcheck: pinged ${1:-(ok)}" || log "healthcheck: ping ${1:-(ok)} failed (non-fatal)"
+}
+
+# Single-flight: stop overlapping runs (cron + a manual run) from clobbering out/
+# or publishing on top of each other. flock holds fd 9 until this process exits.
+LOCK="${TMPDIR:-/tmp}/poa-feed.lock"
+exec 9>"$LOCK" 2>/dev/null || true
+if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
+  log "another run holds $LOCK — exiting"; exit 0
+fi
+
 # The CLI usage report goes OUTSIDE ./out — the agent may recreate ./out during
 # its run, which would unlink a file we'd placed inside it. Keep it in /tmp.
 CLIRUN="$(mktemp "${TMPDIR:-/tmp}/poa-clirun.XXXXXX")"
-trap 'rm -f "$CLIRUN"' EXIT
+# On any non-zero exit, alert via the healthcheck /fail endpoint (if configured)
+# so silent failures surface; always clean up the usage report.
+on_exit() { local code=$?; rm -f "$CLIRUN"; [ "$code" -ne 0 ] && ping_hc /fail; return 0; }
+trap on_exit EXIT
 
 # 1. self-update from the public repo (a push auto-updates the next run)
 if [ "${POA_SKIP_PULL:-0}" != "1" ] && git rev-parse --git-dir >/dev/null 2>&1; then
@@ -138,4 +162,19 @@ fi
 #    (store simply isn't updated this run) if Cohere/the store is unavailable.
 node "$SCRIPT_DIR/vec.js" embed "$ITEMS" || log "embed: store not updated this run"
 
+# 9. off-server backup of the archive — the durable source the vector store is
+#    rebuilt from (`vec.js reindex`). Without this, a VPS disk loss takes the
+#    whole history with it. No-op unless POA_BACKUP_REMOTE + rclone are present.
+#    `copy` only uploads new/changed files and never deletes remote-side.
+if [ -n "${POA_BACKUP_REMOTE:-}" ]; then
+  if command -v rclone >/dev/null 2>&1; then
+    rclone copy --no-traverse "$PUBLISH_DIR/archive" "$POA_BACKUP_REMOTE/archive" >/dev/null 2>&1 \
+      && log "backup: archive → $POA_BACKUP_REMOTE/archive" \
+      || log "backup: rclone failed (non-fatal)"
+  else
+    log "backup: POA_BACKUP_REMOTE set but rclone not installed — skipped"
+  fi
+fi
+
 log "published $(node -p 'require("./out/items.json").items.length') items → $PUBLISH_DIR/items.json"
+ping_hc   # success heartbeat (dead-man's-switch); failures alert via on_exit trap
