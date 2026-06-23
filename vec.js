@@ -199,11 +199,15 @@ async function cmdDedup(file) {
       JSON.stringify({ generated_at: new Date().toISOString(), threshold: THRESHOLD, days: DAYS, kept: kept.length, dropped }, null, 2) + "\n");
   } catch (_) {}
 
-  // enrich the run log (run.sh's token-merge preserves existing fields)
+  // enrich the run log (run.sh's token-merge preserves existing fields). Also
+  // correct `published` to the post-dedup count — the agent wrote its pre-dedup
+  // number, but cross-run dedup is the final gate, and run.sh's daily-usage
+  // history reads this field (crossrun_dropped + published == the agent's count).
   try {
     const cyc = JSON.parse(fs.readFileSync("out/cycle.json", "utf8"));
     cyc.after_crossrun_dedup = kept.length;
     cyc.crossrun_dropped = dropped.length;
+    cyc.published = kept.length;
     fs.writeFileSync("out/cycle.json", JSON.stringify(cyc, null, 2) + "\n");
   } catch (_) {}
 
