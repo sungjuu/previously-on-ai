@@ -117,10 +117,41 @@ cat /var/www/poa/cycle.json                     # real tokens + cost
 curl -s https://sungjukim.com/data/items.json | jq '.items | length'
 ```
 
+## 7. Operations: alerting & backup (recommended for unattended use)
+
+A failed run keeps the previous feed up **silently** — so add a dead-man's-switch
+and an off-server backup. Both are no-ops until set in `/opt/previously-on-ai/.env`.
+`run.sh` is also self-locking (`flock`), so an overlapping manual + cron run can't
+clobber each other — no crontab change needed.
+
+**Alerting** — point `POA_HEALTHCHECK_URL` at a dead-man's-switch (e.g. the free
+[healthchecks.io](https://healthchecks.io): create a check with period ~1 day +
+grace). `run.sh` pings it on success and `"$URL/fail"` on failure, so both a
+*failed* and a *never-started* run alert you.
+
+```bash
+echo 'POA_HEALTHCHECK_URL=https://hc-ping.com/<your-uuid>' >> /opt/previously-on-ai/.env
+```
+
+**Off-server backup** — the `archive/` is the durable source the vector store
+rebuilds from; a VPS disk loss otherwise takes the whole history. Back it up with
+rclone (any S3/R2/B2/GDrive target):
+
+```bash
+apt-get install -y rclone
+sudo -u poa -H rclone config            # set up a remote (uses /home/poa/.config/rclone)
+echo 'POA_BACKUP_REMOTE=<remote>:<bucket>' >> /opt/previously-on-ai/.env
+sudo -u poa -H rclone copy /var/www/poa/archive '<remote>:<bucket>/archive'   # seed once
+```
+
+Thereafter each run does an incremental `rclone copy` (never deletes remote-side).
+
 ## Notes
 - `run.sh` does `git pull --ff-only` first, so pushing to this repo updates the
   next scheduled run — no separate deploy step. (A broken push can't empty the
   site: validation must pass before anything is published.)
+- `git pull` updates code only, not deps — re-run `npm install --omit=dev` after a
+  push that changes `package.json`.
 - Cost: one `claude -p` run per day. Pin a cheaper model with `POA_MODEL` if needed.
 - Caddy route that exposes this dir lives in the portfolio repo
   (`deploy/Caddyfile`, the `handle /data/*` block on the apex).
