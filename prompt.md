@@ -8,8 +8,24 @@ Write two files into `./out/` (relative to the repo root — your current workin
 1. `./out/items.json` — the feed (schema below). FIRST read `./sample-items.json` to lock onto the EXACT schema and tone, then write the new feed. Do NOT change the schema or field names.
 2. `./out/cycle.json` — a small run log (schema in the "Cycle log" section). A wrapper script merges token/cost data into it and publishes both files, so you only write `./out/`.
 
-## Sources
-Fetch and follow links from: Simon Willison's weblog (simonwillison.net), Hacker News front page (news.ycombinator.com/news), TechCrunch AI, InfoQ AI/ML/Data, Hugging Face blog (huggingface.co/blog), Python Insider (blog.python.org) & discuss.python.org, LangChain blog (langchain.com/blog), GitHub Trending (and /trending/python). If a fetch result is too large to read at once, grep/read it in chunks. Only use the provided web tools to fetch — do not shell out to curl/wget/python for HTTP.
+## Sources & how to read them (two passes — keep it lean)
+Most of the cost of this job is reading full web pages into context, so read deeply ONLY what you will actually publish. Work in two passes.
+
+**PASS 1 — discover cheaply.** For each source, pull the COMPACT feed (RSS/Atom/JSON/API) to get candidate headlines + short summaries + links + dates. Do NOT load the rendered HTML page in this pass. Prefer these feeds; fall back to the site's normal page only if a feed fails (you may web-search for the current feed URL):
+- Simon Willison — https://simonwillison.net/atom/everything/
+- Hacker News front page — https://hnrss.org/frontpage (or Algolia API: https://hn.algolia.com/api/v1/search?tags=front_page)
+- TechCrunch AI — https://techcrunch.com/category/artificial-intelligence/feed/
+- InfoQ AI/ML/Data — https://feed.infoq.com/
+- Hugging Face blog — https://huggingface.co/blog/feed.xml
+- Python Insider — https://blog.python.org/feeds/posts/default · discuss.python.org — https://discuss.python.org/latest.rss
+- LangChain blog — https://blog.langchain.com/rss.xml (fall back to langchain.com/blog)
+- GitHub Trending — https://github.com/trending and /trending/python (no feed; read the page once and scan only the top ~15 repos)
+
+From each source consider roughly the top ~10–12 recent candidates (lean toward more from high-signal sources like Simon Willison and Hacker News). Only use the provided web tools to fetch — do NOT shell out to curl/wget/python for HTTP.
+
+**PASS 2 — select, then deep-read only survivors.** From the pooled candidates, drop off-topic ones (see "What to include") and merge same-event duplicates, leaving a shortlist of ~12–15 stories. ONLY THEN fetch the full article/source for each shortlisted story to write its card. Do NOT fetch full pages for candidates you already rejected. If a fetched page is too large, grep/read the relevant part in chunks rather than loading it whole.
+
+Leanness comes from not deep-reading rejects — NOT from skimping on a card you publish. Every published card must still be written from its fully-read source with facts, dates, and numbers verified (see "Quantity & honesty").
 
 ## What to include
 High-signal, PRACTICAL updates for builders across: LLM products & APIs (OpenAI, Anthropic/Claude, Google, Meta, open-weight models), LLM agents & agent frameworks, open-source AI libraries, Python ecosystem/language/packaging, vector databases, MLOps & model serving, data engineering, Kubernetes/infra for AI. EXCLUDE: pure funding rounds, generic hype, consumer fluff, marketing with no substance.
