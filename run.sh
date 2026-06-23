@@ -94,6 +94,17 @@ CLIRUN="$CLIRUN" node -e '
   console.log(`[cycle] ${cyc.tokens_used} tokens · $${cyc.cost_usd}`);
 ' || log "cycle.json enrichment skipped"
 
+# 5b. stamp the REAL publish time into items.json. The agent writes a nominal
+#     time (it tends to emit the scheduled 07:00 KST), so the runner overwrites
+#     generated_at with the actual wall-clock time in KST (+09:00).
+node -e '
+  const fs = require("fs");
+  const d = JSON.parse(fs.readFileSync("out/items.json", "utf8"));
+  d.generated_at = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 19) + "+09:00";
+  fs.writeFileSync("out/items.json", JSON.stringify(d, null, 2) + "\n");
+  console.log("[items] generated_at = " + d.generated_at);
+' || log "generated_at stamp skipped"
+
 # 6. atomic publish (write tmp on the same fs, then rename)
 mkdir -p "$PUBLISH_DIR/archive"
 install -m 644 "$ITEMS" "$PUBLISH_DIR/.items.json.tmp" && mv -f "$PUBLISH_DIR/.items.json.tmp" "$PUBLISH_DIR/items.json"
