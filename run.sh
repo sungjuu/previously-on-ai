@@ -158,7 +158,7 @@ if [ -f out/cycle.json ]; then
     let rows = [];
     try { const r = JSON.parse(fs.readFileSync(hist, "utf8")); if (Array.isArray(r)) rows = r; } catch (_) {}
     rows = rows.filter(r => r.date !== date);
-    rows.push({ date, tokens_used: c.tokens_used ?? null, published: c.published ?? null, raw_seen: c.raw_seen ?? null, after_dedup: c.after_dedup ?? null });
+    rows.push({ date, tokens_used: c.tokens_used ?? null, published: c.published ?? null, raw_seen: c.raw_seen ?? null, after_dedup: c.after_dedup ?? null, crossrun_dropped: c.crossrun_dropped ?? null });
     rows.sort((a, b) => a.date < b.date ? -1 : 1);
     rows = rows.slice(-60);
     fs.writeFileSync(hist + ".tmp", JSON.stringify(rows) + "\n");
