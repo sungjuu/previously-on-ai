@@ -5,7 +5,7 @@ You are running non-interactively (cron / systemd, `claude -p`) from the reposit
 ## Output files
 Write two files into `./out/` (relative to the repo root — your current working directory). Create the directory if needed.
 
-1. `./out/items.json` — the feed (schema below). FIRST read `./sample-items.json` to lock onto the EXACT schema and tone, then write the new feed. Do NOT change the schema or field names.
+1. `./out/items.json` — the feed (schema below). FIRST read `./sample-items.json` to lock onto the EXACT schema (field names, types, structure). Do NOT change the schema or field names. For the KOREAN tone, the sample is OUTDATED — follow the "Bilingual fields" rules below, not the sample's 해라체.
 2. `./out/cycle.json` — a small run log (schema in the "Cycle log" section). A wrapper script merges token/cost data into it and publishes both files, so you only write `./out/`.
 
 ## Sources & how to read them (two passes — keep it lean)
@@ -57,28 +57,46 @@ Each item:
 
 ## Bilingual fields — English and Korean
 
-For each item, produce bilingual fields. In this schema:
-- `title_en` / `summary_en` are the English fields ("titleEn" / "summaryEn").
-- `title_ko` / `summary_ko` are the Korean fields ("titleKo" / "summaryKo").
+For each item, produce bilingual fields (`*_en` / `*_ko`).
 
-The Korean fields are **not direct translations**. They are localized Korean editorial versions for Korean software engineers. Apply the rules below to **all** Korean fields — `title_ko`, `summary_ko`, `why_ko`, `who_ko`, `try_ko`.
+**The Korean fields are NOT translations.** Write them from scratch, from the
+verified facts, as if a Korean tech-media editor wrote the piece for Korean
+software engineers. Never mirror the English sentence structure — if a Korean
+sentence reads like a translation (영어 관계절을 그대로 옮긴 명사구, 대시 삽입구,
+절 3개짜리 장문), rewrite it before publishing. Do not add new claims.
 
-Rules for Korean:
-1. Use concise Korean technical writing.
-2. Avoid marketing tone.
-3. Keep common technical terms in English if Korean sounds forced.
-4. Do not add new claims.
-5. Use 1 sentence for `title_ko`.
-6. Use 1–2 sentences for `summary_ko`.
-7. Avoid "혁신적인", "강력한", "획기적인", "사용자 경험 향상", "최첨단".
-8. Prefer direct statements over vague benefit claims.
-9. Preserve product names, company names, model names, APIs, and numbers exactly.
+Korean style rules (apply to ALL `*_ko` fields — title, summary, why, who, try):
+1. **요체(존댓말)로 씁니다** — "~합니다 / ~입니다 / ~해 보세요". 명령형 "~하라",
+   "~해 두라"는 금지. `title_ko`만 예외적으로 어미 없는 헤드라인체를 허용합니다
+   ("~ 출시", "~ 공개").
+2. 한 문장에는 하나의 생각만 담습니다. 절이 3개 이상 이어지면 문장을 나눕니다.
+3. 대시(—) 삽입구 금지 — 별도 문장으로 풀어 씁니다. 괄호는 짧은 부연에만 씁니다.
+4. 영어 관계절을 그대로 옮긴 명사구 종결을 피합니다. "~하는 팀, ~하는 사람" 나열
+   대신 자연스러운 문장으로: "Sonnet 4.6을 운영 중이라면 눈여겨볼 만합니다."
+5. 한국어로 옮기면 어색한 기술 용어는 영어를 유지합니다 (tokenizer, cold start,
+   cache 등). 제품·회사·모델·API 이름과 숫자는 원문 그대로 씁니다.
+6. 마케팅 톤 금지: "혁신적인", "강력한", "획기적인", "최첨단", "게임 체인저",
+   "사용자 경험 향상" 사용 불가.
+7. 분량: `summary_ko` 2~3문장, `why_ko`/`who_ko`/`try_ko` 각 1~2문장.
+8. `try_ko`는 카드 라벨 "이럴 때 써보세요…"에 이어지는 문장입니다. "…"로 시작해
+   "~해 보세요" 계열로 끝냅니다.
 
-English tone: sharp developer briefing — clear, concise, slightly witty, no hype. `summary_en` 3–4 sentences, facts only.
+Few-shot — 번역투(BAD) → 자연스러운 한국어(GOOD). 발행 전 모든 `*_ko` 필드를 이
+기준으로 스스로 검수하십시오:
+- BAD: "작업당 비용이 핵심 지표인 에이전트를 만드는 사람."
+  GOOD: "에이전트를 만들면서 작업당 비용을 민감하게 관리하는 개발자에게 유용합니다."
+- BAD: "…운영 환경에서 Sonnet 4.6을 사용 중이라면 — 업그레이드 전에 실제 프롬프트에서 토큰 수를 재측정하고, 적응형 사고가 필요 없다면 `thinking`을 명시적으로 추가하라."
+  GOOD: "…운영 환경에서 Sonnet 4.6을 쓰고 있다면, 업그레이드 전에 실제 프롬프트로 토큰 수를 다시 재보세요. 적응형 사고가 필요 없으면 `thinking: {type: 'disabled'}` 설정도 잊지 마세요."
+- BAD: "무엇이 효과가 있나 — 성공/실패 카운터가 있는 플레이북으로 저장."
+  GOOD: "효과가 있었던 방법은 성공/실패 횟수와 함께 플레이북으로 저장됩니다."
+- BAD: "세계 최대 CDN이 크롤러 분류 방식 변경을 강제하면서 AI 기업이 대규모로 접근할 수 있는 학습 데이터가 실제로 달라진다."
+  GOOD: "세계 최대 CDN이 크롤러 분류를 강제하는 만큼, AI 기업이 확보할 수 있는 학습 데이터의 범위가 실제로 달라집니다."
+
+English tone: unchanged — sharp developer briefing, clear, concise, slightly witty, no hype. `summary_en` 3–4 sentences, facts only.
 
 ## Cycle log (./out/cycle.json)
 Write a JSON object with the counts you actually observed this run:
-- `prompt_version`: "v1"
+- `prompt_version`: "v2"
 - `raw_seen`: integer — distinct candidate stories you encountered across sources before filtering
 - `after_keyword_filter`: integer — candidates left after dropping off-topic ones
 - `after_dedup`: integer — distinct stories left after semantic dedup
