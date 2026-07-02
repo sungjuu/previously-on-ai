@@ -32,6 +32,11 @@
 //                        stories well below, so 0.85 catches near-duplicates while
 //                        sparing genuine multi-day follow-ups. Re-tune via `vec.js eval`.
 //   POA_DEDUP_DAYS       retrieval window in days (default 14)
+//   POA_RELATED_MIN      cosine similarity at/above which a past item is "related
+//                        earlier coverage" (default 0.55 — well below the dup
+//                        threshold; captures follow-ups and same-topic stories)
+//   POA_RELATED_K        max related links attached per item (default 3)
+//   POA_RELATED_DAYS     how far back related retrieval looks (default 90)
 
 const fs = require("fs");
 const path = require("path");
@@ -42,6 +47,10 @@ const MODEL = process.env.POA_EMBED_MODEL || "embed-multilingual-v3.0";
 const DIM = Number(process.env.POA_EMBED_DIM || 1024);
 const THRESHOLD = Number(process.env.POA_DEDUP_THRESHOLD || 0.85);
 const DAYS = Number(process.env.POA_DEDUP_DAYS || 14);
+const RELATED_MIN = Number(process.env.POA_RELATED_MIN || 0.55);
+const RELATED_K = Number(process.env.POA_RELATED_K || 3);
+const RELATED_DAYS = Number(process.env.POA_RELATED_DAYS || 90);
+const kstDate = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 const CACHE = "out/.veccache.json"; // candidate vectors handed from `dedup` to `embed` (saves a Cohere call)
 const COHERE_BATCH = 96; // Cohere embed max texts per request
 
@@ -114,23 +123,29 @@ function openDb() {
       );
       create virtual table if not exists vec_items using vec0(embedding float[${DIM}] distance_metric=cosine);
     `);
+    // v2 migration: feed_date = the KST date the item appeared in the published
+    // feed (i.e. its archive/<date>.json file) — used for "related coverage"
+    // deep links. Older rows stay null; the UI falls back to the source link.
+    const cols = db.prepare("pragma table_info(items)").all().map((c) => c.name);
+    if (!cols.includes("feed_date")) db.exec("alter table items add column feed_date text");
   } catch (e) { throw soft(new Error("cannot open store " + DB_PATH + ": " + e.message)); }
   return db;
 }
 
-function upsert(db, item, vec) {
+function upsert(db, item, vec, feedDate) {
   const f32 = Float32Array.from(vec);
   const now = new Date().toISOString();
+  const fd = feedDate || null;
   const row = db.prepare("select rowid from items where id = ?").get(item.id);
   let rowid;
   if (row) {
     rowid = row.rowid;
-    db.prepare("update items set published_at=?, indexed_at=?, title_en=?, source_url=? where rowid=?")
-      .run(item.published_at || null, now, item.title_en || null, item.source_url || null, rowid);
+    db.prepare("update items set published_at=?, indexed_at=?, title_en=?, source_url=?, feed_date=coalesce(?, feed_date) where rowid=?")
+      .run(item.published_at || null, now, item.title_en || null, item.source_url || null, fd, rowid);
     db.prepare("delete from vec_items where rowid = ?").run(BigInt(rowid));
   } else {
-    const info = db.prepare("insert into items(id, published_at, indexed_at, title_en, source_url) values (?,?,?,?,?)")
-      .run(item.id, item.published_at || null, now, item.title_en || null, item.source_url || null);
+    const info = db.prepare("insert into items(id, published_at, indexed_at, title_en, source_url, feed_date) values (?,?,?,?,?,?)")
+      .run(item.id, item.published_at || null, now, item.title_en || null, item.source_url || null, fd);
     rowid = info.lastInsertRowid;
   }
   db.prepare("insert into vec_items(rowid, embedding) values (?, ?)").run(BigInt(rowid), f32);
@@ -142,13 +157,13 @@ function nearest(db, vec, days, k = 20) {
   const f32 = Float32Array.from(vec);
   const knn = db.prepare("select rowid, distance from vec_items where embedding match ? and k = ?").all(f32, k);
   const cutoff = Date.now() - days * 86400 * 1000;
-  const getMeta = db.prepare("select id, published_at, title_en from items where rowid = ?");
+  const getMeta = db.prepare("select id, published_at, title_en, source_url, feed_date from items where rowid = ?");
   const out = [];
   for (const r of knn) {
     const m = getMeta.get(r.rowid);
     if (!m) continue;
     if (m.published_at && Date.parse(m.published_at) < cutoff) continue;
-    out.push({ id: m.id, title_en: m.title_en, sim: 1 - r.distance });
+    out.push({ id: m.id, title_en: m.title_en, source_url: m.source_url, feed_date: m.feed_date, sim: 1 - r.distance });
   }
   return out.sort((a, b) => b.sim - a.sim);
 }
@@ -175,12 +190,27 @@ async function cmdDedup(file) {
   const kept = [], dropped = [], cache = {};
   items.forEach((it, i) => {
     cache[it.id] = vecs[i];
+    // the related field is ours to write — drop anything the generator invented
+    delete it.related;
     // today's ids are date-prefixed so they can't already be in the store, but
     // guard against self-match in case a prior run already embedded this id.
     const top = nearest(db, vecs[i], DAYS).filter(n => n.id !== it.id)[0];
     if (top && top.sim >= THRESHOLD) {
       dropped.push({ id: it.id, title_en: it.title_en, matched_id: top.id, matched_title_en: top.title_en, sim: Number(top.sim.toFixed(4)) });
     } else {
+      // RAG, visibly: attach "related earlier coverage" — top-k past items above
+      // RELATED_MIN from a wider window than dedup. A ≥THRESHOLD match older than
+      // DAYS is not a dup (it escaped the dedup window) but is the strongest
+      // possible follow-up, so no upper bound is applied.
+      const rel = nearest(db, vecs[i], RELATED_DAYS)
+        .filter(n => n.id !== it.id && n.sim >= RELATED_MIN)
+        .slice(0, RELATED_K)
+        .map(n => ({
+          id: n.id, title_en: n.title_en,
+          feed_date: n.feed_date || null, source_url: n.source_url || null,
+          sim: Number(n.sim.toFixed(4)),
+        }));
+      if (rel.length) it.related = rel;
       kept.push(it);
     }
   });
@@ -234,10 +264,12 @@ async function cmdEmbed(file) {
     need.forEach((it, i) => { cache[it.id] = vecs[i]; });
   }
 
-  db.transaction(() => { for (const it of items) upsert(db, it, cache[it.id]); })();
+  // embed runs right after publish, so today's KST date IS the feed date
+  const feedDate = process.env.POA_FEED_DATE || kstDate();
+  db.transaction(() => { for (const it of items) upsert(db, it, cache[it.id], feedDate); })();
   const total = db.prepare("select count(*) c from items").get().c;
   db.close();
-  log(`embed: upserted ${items.length} item(s); store now holds ${total}`);
+  log(`embed: upserted ${items.length} item(s) (feed_date ${feedDate}); store now holds ${total}`);
 }
 
 async function cmdReindex(dir) {
@@ -247,12 +279,14 @@ async function cmdReindex(dir) {
   catch (e) { hardFail("cannot read archive dir " + dir + ": " + e.message); }
   if (!files.length) hardFail("no .json files in " + dir);
 
-  // de-dup by id across all archive files; later (newer) files win
+  // de-dup by id across all archive files; later (newer) files win.
+  // The archive filename (YYYY-MM-DD.json, KST) is the item's feed_date.
   const byId = new Map();
   for (const f of files) {
     try {
       const d = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-      for (const it of (d.items || [])) byId.set(it.id, it);
+      const fd = /^\d{4}-\d{2}-\d{2}\.json$/.test(f) ? f.slice(0, 10) : null;
+      for (const it of (d.items || [])) byId.set(it.id, { it, fd });
     } catch (e) { log("WARN: skipping", f + ":", e.message); }
   }
   const items = [...byId.values()];
@@ -264,9 +298,9 @@ async function cmdReindex(dir) {
   for (let i = 0; i < items.length; i += COHERE_BATCH) {
     const batch = items.slice(i, i + COHERE_BATCH);
     let vecs;
-    try { vecs = await embedTexts(batch.map(embText)); }
+    try { vecs = await embedTexts(batch.map((r) => embText(r.it))); }
     catch (e) { db.close(); if (e.soft) softExit("reindex: " + e.message); throw e; }
-    db.transaction(() => { batch.forEach((it, j) => upsert(db, it, vecs[j])); })();
+    db.transaction(() => { batch.forEach((r, j) => upsert(db, r.it, vecs[j], r.fd)); })();
     done += batch.length;
     log(`reindex: ${done}/${items.length}`);
   }

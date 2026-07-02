@@ -135,7 +135,14 @@ install -m 644 "$ITEMS" "$PUBLISH_DIR/.items.json.tmp" && mv -f "$PUBLISH_DIR/.i
 if [ -f out/cycle.json ]; then
   install -m 644 out/cycle.json "$PUBLISH_DIR/.cycle.json.tmp" && mv -f "$PUBLISH_DIR/.cycle.json.tmp" "$PUBLISH_DIR/cycle.json"
 fi
-cp -f "$PUBLISH_DIR/items.json" "$PUBLISH_DIR/archive/$(date +%F).json"
+# Archive is named by the KST publication date — the server may run in UTC,
+# where `date +%F` would be one day behind around the 07:00 KST run.
+cp -f "$PUBLISH_DIR/items.json" "$PUBLISH_DIR/archive/$(TZ=Asia/Seoul date +%F).json"
+
+# 6b. RSS mirror of the feed, served at /data/feed.xml. Soft-fails: RSS is a
+#     convenience view, never a reason to fail an otherwise good run.
+node "$SCRIPT_DIR/rss.js" "$ITEMS" "$PUBLISH_DIR/feed.xml" && chmod 644 "$PUBLISH_DIR/feed.xml" \
+  || log "rss: feed.xml not updated (non-fatal)"
 
 # 7. append this cycle to the rolling daily-usage history (one entry per date,
 #    last 60 days) — served at /data/cycle-history.json for the lab usage chart.
@@ -144,7 +151,10 @@ if [ -f out/cycle.json ]; then
     const fs = require("fs");
     const hist = process.env.HIST;
     const c = JSON.parse(fs.readFileSync("out/cycle.json", "utf8"));
-    const date = (c.generated_at || new Date().toISOString()).slice(0, 10);
+    // Chart dates are KST publication dates. cycle.generated_at is UTC, which
+    // is still the previous day at 07:00 KST — shift +9h before taking the date.
+    const base = c.generated_at ? Date.parse(c.generated_at) : Date.now();
+    const date = new Date(base + 9 * 3600 * 1000).toISOString().slice(0, 10);
     let rows = [];
     try { const r = JSON.parse(fs.readFileSync(hist, "utf8")); if (Array.isArray(r)) rows = r; } catch (_) {}
     rows = rows.filter(r => r.date !== date);

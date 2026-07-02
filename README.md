@@ -2,7 +2,8 @@
 
 A scheduled agent that reads the AI/developer ecosystem every morning and
 publishes a small, deduplicated, **bilingual (EN/KO)** briefing as static JSON.
-It runs unattended on a VPS, costs a few cents a day, and its output is rendered
+It runs unattended on a VPS, costs a couple of dollars a day (real tokens/cost
+are tracked per run in `cycle.json`), and its output is rendered
 by the live `/lab` page on [sungjukim.com](https://sungjukim.com/lab).
 
 This repo is the **agent operations** side: the prompt, the runner, validation,
@@ -52,6 +53,12 @@ memory with a small RAG loop — **embed → vector store → kNN retrieval → 
 - **It can't empty the site.** If Cohere or the store is unavailable, dedup/embed
   warn and skip without touching the feed — the run still validates and publishes,
   just without that day's cross-run dedup.
+- **Related earlier coverage (visible RAG).** The same retrieval pass also attaches
+  up to `POA_RELATED_K` (default 3) past items at/above `POA_RELATED_MIN` cosine
+  similarity (default 0.55) from the last `POA_RELATED_DAYS` (default 90) as a
+  `related` array on each item — follow-ups and same-topic stories the feed has
+  already covered. The `/lab` UI renders these as "related earlier coverage" links
+  that jump to the day the story ran (via `feed_date`, the KST archive date).
 
 Tune the threshold against a labeled set: `node vec.js eval eval/dedup-labels.sample.json`
 prints precision / recall / F1 across thresholds and recommends one (favour
