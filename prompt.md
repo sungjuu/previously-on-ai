@@ -19,6 +19,7 @@ Most of the cost of this job is reading full web pages into context, so read dee
 - Hugging Face blog — https://huggingface.co/blog/feed.xml
 - Python Insider — https://blog.python.org/feeds/posts/default · discuss.python.org — https://discuss.python.org/latest.rss
 - LangChain blog — https://blog.langchain.com/rss.xml (fall back to langchain.com/blog)
+- GeekNews (Korean, news.hada.io) — https://feeds.feedburner.com/geeknews-feed (fall back to https://news.hada.io/rss/news). Korean-language summaries of mostly external articles; apply the same topic filter (much of it is off-topic general tech). If a GeekNews item survives to PASS 2, deep-read the ORIGINAL article it links to and use that original URL as `source_url` (source: "GeekNews / <original site>"). Same-event overlap with Hacker News is expected — merge as usual.
 - GitHub Trending — https://github.com/trending and /trending/python (no feed; read the page once and scan only the top ~15 repos)
 
 From each source consider roughly the top ~10–12 recent candidates (lean toward more from high-signal sources like Simon Willison and Hacker News). Only use the provided web tools to fetch — do NOT shell out to curl/wget/python for HTTP.
@@ -29,6 +30,8 @@ Leanness comes from not deep-reading rejects — NOT from skimping on a card you
 
 ## What to include
 High-signal, PRACTICAL updates for builders across: LLM products & APIs (OpenAI, Anthropic/Claude, Google, Meta, open-weight models), LLM agents & agent frameworks, open-source AI libraries, Python ecosystem/language/packaging, vector databases, MLOps & model serving, data engineering, Kubernetes/infra for AI. EXCLUDE: pure funding rounds, generic hype, consumer fluff, marketing with no substance.
+
+**HARD RECENCY LIMIT: never publish an item whose `published_at` is more than 3 days (72 hours) old**, no matter how good the story is. If a source surfaces an older story (e.g. a feed re-listing last week's release), drop it in PASS 2. A downstream filter deletes >3-day-old items mechanically, so publishing one only wastes a slot.
 
 ## Deduplicate (important)
 Judge items by SEMANTIC similarity. If multiple sources cover the same underlying event, MERGE them into ONE card — keep the single most authoritative source_url and optionally mention the others in the summary. Never publish two cards for the same story.

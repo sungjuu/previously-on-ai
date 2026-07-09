@@ -88,6 +88,31 @@ if ! claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" > "$CLIRUN"; then
   exit 1
 fi
 
+# 3a. hard recency cap: drop items whose published_at is older than
+#     POA_MAX_AGE_DAYS (default 3). The prompt asks the agent for 24–48h
+#     coverage, but older stories still slip through — this makes the limit
+#     mechanical. Mutates out/items.json (removals only, keeps source_count
+#     consistent). Soft-fails so it can never block an otherwise good run.
+node -e '
+  const fs = require("fs");
+  const days = Number(process.env.POA_MAX_AGE_DAYS || 3);
+  const cutoff = Date.now() - days * 86400e3;
+  const d = JSON.parse(fs.readFileSync("out/items.json", "utf8"));
+  const keep = [], dropped = [];
+  for (const it of d.items || []) {
+    const t = Date.parse(it.published_at);
+    (Number.isNaN(t) || t >= cutoff ? keep : dropped).push(it); // unparseable dates are validate.js\x27s job
+  }
+  if (dropped.length) {
+    d.items = keep;
+    d.source_count = keep.length;
+    fs.writeFileSync("out/items.json", JSON.stringify(d, null, 2) + "\n");
+    console.log(`[age] dropped ${dropped.length} item(s) older than ${days}d: ` + dropped.map(i => i.id).join(", "));
+  } else {
+    console.log(`[age] all ${keep.length} item(s) within ${days}d`);
+  }
+' || log "age filter errored — continuing with the unfiltered feed"
+
 # 3b. cross-run dedup: drop candidates that match a recent published item.
 #     Mutates out/items.json (removals only, keeps source_count consistent) and
 #     records out/dedup-report.json. Soft-fails (exit 0, feed untouched) if
