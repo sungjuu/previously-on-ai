@@ -5,7 +5,7 @@ You are running non-interactively (cron / systemd, `claude -p`) from the reposit
 ## Output files
 Write two files into `./out/` (relative to the repo root — your current working directory). Create the directory if needed.
 
-1. `./out/items.json` — the feed (schema below). FIRST read `./sample-items.json` to lock onto the EXACT schema (field names, types, structure). Do NOT change the schema or field names. For the KOREAN tone, the sample is OUTDATED — follow the "Bilingual fields" rules below, not the sample's 해라체.
+1. `./out/items.json` — the feed (schema below). FIRST read `./sample-items.json` to lock onto the EXACT schema (field names, types, structure) and Korean editorial tone. Do NOT change the schema or field names.
 2. `./out/cycle.json` — a small run log (schema in the "Cycle log" section). A wrapper script merges token/cost data into it and publishes both files, so you only write `./out/`.
 
 ## Sources & how to read them (two passes — keep it lean)
