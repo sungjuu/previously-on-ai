@@ -82,6 +82,16 @@ To use pay-as-you-go billing instead, put `OPENAI_API_KEY=...` in
 `/opt/previously-on-ai/.env` and skip the login. To pin a model, set `POA_MODEL`
 in the crontab below (default is the CLI's default model).
 
+> **Why the run bypasses codex's sandbox.** On Linux that sandbox is bubblewrap,
+> and Ubuntu 24.04 sets `kernel.apparmor_restrict_unprivileged_userns=1`, so the
+> vendored `bwrap` (which has no AppArmor profile) fails with "setting up uid map:
+> Permission denied" and *every* shell command in the run fails — the agent
+> finishes having written nothing. Rather than flip that sysctl and weaken
+> unprivileged-userns hardening box-wide, run.sh passes
+> `--dangerously-bypass-approvals-and-sandbox`: `poa` is a dedicated no-sudo user
+> that owns only this repo and the published feed, the same trust level the old
+> `claude -p --dangerously-skip-permissions` path had.
+
 > This replaced a Claude Code subscription run that started failing with
 > `oauth_org_not_allowed` (HTTP 403, "organization has disabled Claude
 > subscription access for Claude Code"). If codex ever fails the same way, the

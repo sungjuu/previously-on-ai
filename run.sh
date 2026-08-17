@@ -87,14 +87,20 @@ fi
 rm -rf out && mkdir -p out
 
 # 3. run the generator headless; capture the JSONL event stream for token usage.
-#    workspace-write confines the agent's writes to this repo (it only needs
-#    ./out/), and network_access lets it fetch the source feeds — no need for the
-#    blanket "skip all approvals" escape hatch the old claude path used.
+#    The sandbox is bypassed because codex's Linux sandbox is bubblewrap, and
+#    Ubuntu 24.04 ships kernel.apparmor_restrict_unprivileged_userns=1, so the
+#    vendored bwrap (no AppArmor profile) dies with "setting up uid map:
+#    Permission denied" and EVERY shell command in the run fails. The alternative
+#    fix — flipping that sysctl — weakens unprivileged-userns hardening for the
+#    whole box to sandbox one cron job. This runs as `poa`, a dedicated
+#    unprivileged user with no sudo that owns only this repo and the published
+#    feed: the same trust level the old `claude -p --dangerously-skip-permissions`
+#    path had. If bwrap ever works here, prefer:
+#      -s workspace-write -c sandbox_workspace_write.network_access=true
 #    codex exits non-zero on auth/API failure (unlike `claude -p --output-format
 #    json`, which exited 0 and wrapped errors as {"is_error":true} — that is how a
 #    2-day auth outage stayed silent), so the exit code alone is a real guard.
-CODEX_ARGS=(exec --json -s workspace-write
-            -c sandbox_workspace_write.network_access=true
+CODEX_ARGS=(exec --json --dangerously-bypass-approvals-and-sandbox
             -c tools.web_search=true)
 [ -n "$MODEL" ] && CODEX_ARGS+=(-m "$MODEL")
 log "generator: starting ($([ -n "$MODEL" ] && echo "$MODEL" || echo "default model"))"
@@ -104,6 +110,14 @@ START=$SECONDS
 if ! codex "${CODEX_ARGS[@]}" - < "$PROMPT_FILE" > "$CLIRUN" 2>&1; then
   log "generator: codex run failed — not publishing" >&2
   tail -n 5 "$CLIRUN" >&2
+  exit 1
+fi
+# The agent can exit 0 having written nothing (e.g. every shell command it tried
+# failed). Bail here, before the age filter and dedup each throw their own ENOENT
+# stack trace and bury the agent's own explanation of what went wrong.
+if [ ! -f "$ITEMS" ]; then
+  log "generator: exited 0 but wrote no $ITEMS — not publishing" >&2
+  tail -n 3 "$CLIRUN" >&2
   exit 1
 fi
 

@@ -30,6 +30,12 @@ if [ "${FAKE_CODEX_FAIL:-0}" = "1" ]; then
   echo 'ERROR codex_api: failed to connect: HTTP error: 401 Unauthorized' >&2
   exit 1
 fi
+# Exit 0 having written nothing — what a broken sandbox looks like: the agent
+# gives up after every shell command fails, but the CLI itself succeeded.
+if [ "${FAKE_CODEX_EMPTY:-0}" = "1" ]; then
+  echo '{"type":"item.completed","item":{"type":"agent_message","text":"Unable to write outputs: every shell command failed with bwrap: setting up uid map: Permission denied"}}'
+  exit 0
+fi
 node -e '
   const fs = require("fs");
   const d = JSON.parse(fs.readFileSync(process.env.SAMPLE, "utf8"));
@@ -72,4 +78,10 @@ FAKE_CODEX_FAIL=1 "$REPO/run.sh" > "$TMP/bad.log" 2>&1 && fail "dead agent shoul
 grep -q "codex run failed" "$TMP/bad.log" || fail "failure not logged (stderr is being swallowed)"
 grep -q "401 Unauthorized" "$TMP/bad.log" || fail "agent's own error not surfaced in the log"
 
-echo "SMOKE OK — usage merge, stale-model guard, and the failure path all hold"
+FAKE_CODEX_EMPTY=1 "$REPO/run.sh" > "$TMP/empty.log" 2>&1 && fail "empty run should exit non-zero"
+[ "$BEFORE" = "$(shasum "$TMP/pub/items.json")" ] || fail "empty run clobbered the published feed"
+grep -q "wrote no" "$TMP/empty.log" || fail "missing items.json not reported before the downstream steps"
+grep -q "bwrap" "$TMP/empty.log" || fail "agent's explanation not surfaced in the log"
+! grep -q "ENOENT" "$TMP/empty.log" || fail "downstream steps still spamming stack traces"
+
+echo "SMOKE OK — usage merge, stale-model guard, and both failure paths hold"
