@@ -15,9 +15,11 @@ never touches it. The live data is never committed to git.
 ## 1. Prerequisites (as root)
 
 ```bash
-# Node.js (validation, JSON merge, vector store) and the Claude Code CLI
-apt-get install -y nodejs npm git build-essential   # build-essential: native better-sqlite3
-npm install -g @anthropic-ai/claude-code      # provides `claude` on PATH
+# Node.js (validation, JSON merge, vector store), w3m (the agent renders article
+# pages to text with it — without w3m it falls back to a crude tag-strip), and
+# the Codex CLI
+apt-get install -y nodejs npm git build-essential w3m   # build-essential: native better-sqlite3
+npm install -g @openai/codex      # provides `codex` on PATH
 
 # dedicated unprivileged user
 adduser --system --group --home /home/poa --shell /bin/bash poa
@@ -65,19 +67,25 @@ If Cohere or the store is ever unavailable, runs still publish — just without
 that day's cross-run dedup. The store is fully rebuildable any time with the same
 `vec.js reindex /var/www/poa/archive`.
 
-## 4. Authenticate the agent (Claude subscription, not an API key)
+## 4. Authenticate the agent (ChatGPT subscription, not an API key)
 
-Log in once as `poa`; the session persists in `/home/poa/.claude` and auto-refreshes.
+Log in once **as `poa`**; the session persists in `/home/poa/.codex` and auto-refreshes.
 Cron runs as `poa` with `HOME=/home/poa`, so the scheduled run reuses this login.
+A login under `root` does **not** count — auth lives per-user under `$CODEX_HOME`.
 
 ```bash
-sudo -u poa -H claude auth login --claudeai   # interactive: open the URL, paste the code
-sudo -u poa -H claude auth status             # verify
+sudo -u poa -H codex login      # interactive: open the URL it prints, approve
+sudo -u poa -H codex login status   # expect "Logged in using ChatGPT"
 ```
 
-Do **not** set `ANTHROPIC_API_KEY` anywhere for this user — it would override the
-subscription session. No env file is needed; to pin a model, set `POA_MODEL` in
-the crontab below (default is the CLI's default model).
+To use pay-as-you-go billing instead, put `OPENAI_API_KEY=...` in
+`/opt/previously-on-ai/.env` and skip the login. To pin a model, set `POA_MODEL`
+in the crontab below (default is the CLI's default model).
+
+> This replaced a Claude Code subscription run that started failing with
+> `oauth_org_not_allowed` (HTTP 403, "organization has disabled Claude
+> subscription access for Claude Code"). If codex ever fails the same way, the
+> run now exits non-zero and the healthcheck in §7 alerts — it does not go quiet.
 
 ## 5. Schedule it (cron, 07:00 KST daily)
 
@@ -91,7 +99,6 @@ reuses the login session.
 ```bash
 crontab -u poa - <<'CRON'
 PATH=/usr/local/bin:/usr/bin:/bin:/home/poa/.local/bin
-POA_MODEL=claude-sonnet-4-6
 POA_STATE_DIR=/var/lib/poa
 # 07:00 KST = 22:00 UTC (Korea has no DST) — regenerate and publish the feed
 0 22 * * * /opt/previously-on-ai/run.sh >> /home/poa/poa-feed.log 2>&1
@@ -113,7 +120,7 @@ crontab -u poa -l        # confirm
 
 ```bash
 sudo -u poa -H /opt/previously-on-ai/run.sh     # runs once
-cat /var/www/poa/cycle.json                     # real tokens + cost
+cat /var/www/poa/cycle.json                     # real token usage (cost_usd is null on a flat plan)
 curl -s https://sungjukim.com/data/items.json | jq '.items | length'
 ```
 
@@ -152,6 +159,7 @@ Thereafter each run does an incremental `rclone copy` (never deletes remote-side
   site: validation must pass before anything is published.)
 - `git pull` updates code only, not deps — re-run `npm install --omit=dev` after a
   push that changes `package.json`.
-- Cost: one `claude -p` run per day. Pin a cheaper model with `POA_MODEL` if needed.
+- Cost: one `codex exec` run per day, ~600k tokens against the ChatGPT plan's
+  quota (no per-run charge). Pin a cheaper model with `POA_MODEL` if it bites.
 - Caddy route that exposes this dir lives in the portfolio repo
   (`deploy/Caddyfile`, the `handle /data/*` block on the apex).

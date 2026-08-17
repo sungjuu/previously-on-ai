@@ -2,22 +2,22 @@
 #
 # run.sh — regenerate the "Previously on AI" feed and publish it.
 #
-# Pipeline: self-update (git pull) → run the Claude Code CLI headless with
-# prompt.md → validate out/items.json → merge real token/cost into cycle.json →
+# Pipeline: self-update (git pull) → run the Codex CLI headless with prompt.md →
+# validate out/items.json → merge real token usage into cycle.json →
 # atomically publish items.json + cycle.json to the served data dir.
 #
 # The live data never lives in git: the agent writes to ./out/, and this script
 # publishes to $POA_PUBLISH_DIR (default /var/www/poa, served by Caddy at /data/).
 # A bad run never empties the site — we publish only after validation passes.
 #
-# Requirements: Claude Code CLI on PATH (`claude`), authenticated — either a
-# logged-in subscription session (`claude auth login`) or ANTHROPIC_API_KEY.
-# Node.js (for validation + JSON merge).
+# Requirements: Codex CLI on PATH (`codex`), authenticated as the user this runs
+# as — either a logged-in ChatGPT session (`codex login`) or OPENAI_API_KEY.
+# Node.js (for validation + JSON merge). w3m, for HTML→text article reads.
 #
 # Env knobs:
 #   POA_PUBLISH_DIR   where to publish (default /var/www/poa)
 #   POA_STATE_DIR     where the vector-dedup store lives (default /var/lib/poa)
-#   POA_MODEL         pin a model, e.g. claude-sonnet-4-6 (default: CLI default)
+#   POA_MODEL         pin a model, e.g. gpt-5-codex (default: CLI default)
 #   POA_SKIP_PULL=1   skip the self-update git pull
 #   POA_HEALTHCHECK_URL  dead-man's-switch ping URL (success / "$URL/fail") — alerts on failure
 #   POA_BACKUP_REMOTE    rclone target for off-server archive backup (e.g. r2:poa-backup)
@@ -37,6 +37,9 @@ if [ -f "$SCRIPT_DIR/.env" ]; then set -a; . "$SCRIPT_DIR/.env"; set +a; fi
 
 PUBLISH_DIR="${POA_PUBLISH_DIR:-/var/www/poa}"
 MODEL="${POA_MODEL:-}"
+# POA_MODEL used to hold a claude-* id (set in poa's crontab). Ignore leftovers
+# rather than passing an unknown model to codex and losing a day's run.
+case "$MODEL" in claude-*) MODEL="" ;; esac
 PROMPT_FILE="prompt.md"
 ITEMS=out/items.json
 
@@ -57,7 +60,11 @@ ping_hc() {  # ping_hc [/fail]
 # Single-flight: stop overlapping runs (cron + a manual run) from clobbering out/
 # or publishing on top of each other. flock holds fd 9 until this process exits.
 LOCK="${TMPDIR:-/tmp}/poa-feed.lock"
-exec 9>"$LOCK" 2>/dev/null || true
+# Braces matter: `exec 9>"$LOCK" 2>/dev/null` would apply BOTH redirections to
+# the shell permanently, sending every later `>&2` to /dev/null — which is how
+# the 403 outage produced a log with "generator: starting" and nothing after it.
+# Scoping the suppression to the group keeps fd 9 open and stderr intact.
+{ exec 9>"$LOCK"; } 2>/dev/null || true
 if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
   log "another run holds $LOCK — exiting"; exit 0
 fi
@@ -79,12 +86,24 @@ fi
 # 2. clean run dir
 rm -rf out && mkdir -p out
 
-# 3. run the generator headless; capture the CLI usage JSON for real cost/tokens
-CLAUDE_ARGS=(--print --output-format json --dangerously-skip-permissions)
-[ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")
+# 3. run the generator headless; capture the JSONL event stream for token usage.
+#    workspace-write confines the agent's writes to this repo (it only needs
+#    ./out/), and network_access lets it fetch the source feeds — no need for the
+#    blanket "skip all approvals" escape hatch the old claude path used.
+#    codex exits non-zero on auth/API failure (unlike `claude -p --output-format
+#    json`, which exited 0 and wrapped errors as {"is_error":true} — that is how a
+#    2-day auth outage stayed silent), so the exit code alone is a real guard.
+CODEX_ARGS=(exec --json -s workspace-write
+            -c sandbox_workspace_write.network_access=true
+            -c tools.web_search=true)
+[ -n "$MODEL" ] && CODEX_ARGS+=(-m "$MODEL")
 log "generator: starting ($([ -n "$MODEL" ] && echo "$MODEL" || echo "default model"))"
-if ! claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" > "$CLIRUN"; then
-  log "generator: claude run failed — not publishing" >&2
+START=$SECONDS
+# stderr is merged in: codex writes progress and API errors there, and on failure
+# the tail below is the only breadcrumb in the log. The parser skips non-JSON.
+if ! codex "${CODEX_ARGS[@]}" - < "$PROMPT_FILE" > "$CLIRUN" 2>&1; then
+  log "generator: codex run failed — not publishing" >&2
+  tail -n 5 "$CLIRUN" >&2
   exit 1
 fi
 
@@ -126,21 +145,27 @@ if [ ! -f "$ITEMS" ] || ! node "$SCRIPT_DIR/validate.js" "$ITEMS"; then
   exit 1
 fi
 
-# 5. merge real token/cost from the CLI usage report into cycle.json
-CLIRUN="$CLIRUN" node -e '
+# 5. merge real token usage from the codex event stream into cycle.json.
+#    Usage rides on the last "turn.completed" event; cost is a flat subscription
+#    with no per-run price, so cost_usd is null (the usage chart plots tokens).
+CLIRUN="$CLIRUN" RUN_MS="$(( (SECONDS - START) * 1000 ))" node -e '
   const fs = require("fs");
-  const cli = JSON.parse(fs.readFileSync(process.env.CLIRUN, "utf8"));
-  const u = cli.usage || {};
-  const tokens = (u.input_tokens || 0) + (u.output_tokens || 0)
-               + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+  let u = {};
+  for (const line of fs.readFileSync(process.env.CLIRUN, "utf8").split("\n")) {
+    if (!line.startsWith("{")) continue;   // codex interleaves plain log lines
+    try { const e = JSON.parse(line); if (e.type === "turn.completed" && e.usage) u = e.usage; } catch (_) {}
+  }
+  // cached_input_tokens and reasoning_output_tokens are subsets of
+  // input_tokens / output_tokens — adding them would double-count.
+  const tokens = (u.input_tokens || 0) + (u.output_tokens || 0);
   let cyc = {};
   try { cyc = JSON.parse(fs.readFileSync("out/cycle.json", "utf8")); } catch (_) {}
   cyc.generated_at = new Date().toISOString();
   cyc.tokens_used = tokens;
-  cyc.cost_usd = typeof cli.total_cost_usd === "number" ? Number(cli.total_cost_usd.toFixed(4)) : null;
-  cyc.duration_ms = cli.duration_ms ?? null;
+  cyc.cost_usd = null;
+  cyc.duration_ms = Number(process.env.RUN_MS) || null;
   fs.writeFileSync("out/cycle.json", JSON.stringify(cyc, null, 2) + "\n");
-  console.log(`[cycle] ${cyc.tokens_used} tokens · $${cyc.cost_usd}`);
+  console.log(`[cycle] ${cyc.tokens_used} tokens · ${Math.round((cyc.duration_ms || 0) / 1000)}s`);
 ' || log "cycle.json enrichment skipped"
 
 # 5b. stamp the REAL publish time into items.json. The agent writes a nominal

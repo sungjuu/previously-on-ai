@@ -1,6 +1,6 @@
 You are the daily generator for "Previously on AI" — an AI ecosystem change tracker shown on Sungju Kim's portfolio site at the /lab page. Each morning you collect the most important practical AI/developer news, write bilingual briefing cards, and write a static JSON file that the site renders. Cover roughly the last 24–48 hours.
 
-You are running non-interactively (cron / systemd, `claude -p`) from the repository root. Use the tools available to you (web fetch/search, file read/write, bash). Do all work, then stop.
+You are running non-interactively (cron / systemd, `codex exec`) from the repository root. Use the tools available to you (shell, file read/write, web search). Do all work, then stop.
 
 ## Output files
 Write two files into `./out/` (relative to the repo root — your current working directory). Create the directory if needed.
@@ -22,7 +22,13 @@ Most of the cost of this job is reading full web pages into context, so read dee
 - GeekNews (Korean, news.hada.io) — https://feeds.feedburner.com/geeknews-feed (fall back to https://news.hada.io/rss/news). Korean-language summaries of mostly external articles; apply the same topic filter (much of it is off-topic general tech). If a GeekNews item survives to PASS 2, deep-read the ORIGINAL article it links to and use that original URL as `source_url` (source: "GeekNews / <original site>"). Same-event overlap with Hacker News is expected — merge as usual.
 - GitHub Trending — https://github.com/trending and /trending/python (no feed; read the page once and scan only the top ~15 repos)
 
-From each source consider roughly the top ~10–12 recent candidates (lean toward more from high-signal sources like Simon Willison and Hacker News). Only use the provided web tools to fetch — do NOT shell out to curl/wget/python for HTTP.
+From each source consider roughly the top ~10–12 recent candidates (lean toward more from high-signal sources like Simon Willison and Hacker News).
+
+**How to fetch.** Your shell has network access — that is how you read the web.
+- **Feeds** (RSS/Atom/JSON, PASS 1) are already text: `curl -sSL --max-time 30 <url>`.
+- **Article pages** (HTML, PASS 2): `w3m -dump <url>` — it renders the page to plain text. Never read raw HTML into context: the markup dwarfs the prose and it is the single biggest waste of budget in this job. If `w3m` is missing, fall back to `curl -sSL --max-time 30 <url> | sed -e 's/<script[^>]*>.*<\/script>//g' -e 's/<[^>]*>//g'`.
+- A fetch that fails or hangs is not worth retrying more than once — drop that candidate and move on. Never let one dead source stall the run.
+- Use the `web_search` tool only to FIND a url you don't have (e.g. a feed that moved), not to read a page you can fetch directly.
 
 **PASS 2 — select, then deep-read only survivors.** From the pooled candidates, drop off-topic ones (see "What to include") and merge same-event duplicates, leaving a shortlist of ~12–15 stories. ONLY THEN fetch the full article/source for each shortlisted story to write its card. Do NOT fetch full pages for candidates you already rejected. If a fetched page is too large, grep/read the relevant part in chunks rather than loading it whole.
 

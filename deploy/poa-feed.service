@@ -9,13 +9,13 @@ User=poa
 Group=poa
 WorkingDirectory=/opt/previously-on-ai
 # Knobs + COHERE_API_KEY (for dedup embeddings) — root:poa 640, never in git.
-# Claude auth is the logged-in `claude auth login` session under HOME below, NOT
-# an API key here.
+# Agent auth is the logged-in `codex login` session under HOME below (i.e.
+# /home/poa/.codex), NOT an API key here.
 EnvironmentFile=/etc/poa/env
 Environment=HOME=/home/poa
 Environment=POA_PUBLISH_DIR=/var/www/poa
 Environment=POA_STATE_DIR=/var/lib/poa
-# Ensure claude / node / git are found (npm global + user-local installs).
+# Ensure codex / node / git / w3m are found (npm global + user-local installs).
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/poa/.local/bin
 ExecStart=/opt/previously-on-ai/run.sh
 TimeoutStartSec=1800

@@ -16,10 +16,10 @@ over a fixed schema — the two are decoupled by contract.
 07:00 KST (systemd timer)
   └─ run.sh
        ├─ git pull --ff-only            self-update from this repo
-       ├─ claude -p < prompt.md         collect → filter → in-run dedup → write out/items.json + out/cycle.json
+       ├─ codex exec < prompt.md        collect → filter → in-run dedup → write out/items.json + out/cycle.json
        ├─ vec.js dedup out/items.json   cross-RUN dedup: drop items matching the last ~14d (Cohere + sqlite-vec)
        ├─ validate.js out/items.json    schema + canonical tags + count check
-       ├─ merge real tokens/cost        from the CLI usage report → cycle.json
+       ├─ merge real token usage        from the codex event stream → cycle.json
        ├─ atomic publish                → /var/www/poa/{items.json,cycle.json,archive/}
        │                                  served by Caddy at https://sungjukim.com/data/
        └─ vec.js embed out/items.json   embed the published items into the store for tomorrow
@@ -89,7 +89,7 @@ concrete example.
 
 ```bash
 npm install                                           # cohere-ai, better-sqlite3, sqlite-vec
-claude auth login                                     # subscription session (or: export ANTHROPIC_API_KEY=sk-ant-...)
+codex login                                           # ChatGPT session (or: export OPENAI_API_KEY=sk-...)
 echo 'COHERE_API_KEY=...' > .env                      # for the dedup embeddings (gitignored)
 
 # publish into ./out and keep the vector store under ./.state instead of /var/lib/poa

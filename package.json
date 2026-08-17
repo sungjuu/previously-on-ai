@@ -9,7 +9,8 @@
     "dedup": "node vec.js dedup out/items.json",
     "embed": "node vec.js embed out/items.json",
     "reindex": "node vec.js reindex",
-    "eval": "node vec.js eval eval/dedup-labels.sample.json"
+    "eval": "node vec.js eval eval/dedup-labels.sample.json",
+    "smoke": "bash eval/smoke.sh"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

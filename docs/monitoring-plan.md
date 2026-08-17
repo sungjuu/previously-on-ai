@@ -122,7 +122,6 @@ textfile이 압도적으로 단순하다.
 poa_last_success_timestamp_seconds
 poa_run_duration_seconds
 poa_tokens_used
-poa_cost_usd
 poa_items_published
 poa_crossrun_dropped
 poa_age_dropped
@@ -150,7 +149,8 @@ Prometheus가 scrape하면 `up` 메트릭이 공짜 헬스체크가 된다.
   healthchecks.io/Actions와 삼중이 되므로, 안정되면 어디로 통합할지 판단
 - 디스크 > 80%
 - poa-embed `up == 0` (30분 지속)
-- 비용 급증: `poa_cost_usd`가 7일 평균의 2배 초과
+- 사용량 급증: `poa_tokens_used`가 7일 평균의 2배 초과 (codex는 정액제라
+  달러 비용이 없다 — 구독 쿼터를 태우는 토큰이 감시 대상)
 
 **완료 기준**: 규칙별로 조건을 일부러 트리거해 테스트 이메일 수신.
 
