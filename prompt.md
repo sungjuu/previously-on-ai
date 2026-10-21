@@ -5,7 +5,7 @@ You are running non-interactively (cron / systemd, `codex exec`) from the reposi
 ## Output files
 Write two files into `./out/` (relative to the repo root — your current working directory). Create the directory if needed.
 
-1. `./out/items.json` — the feed (schema below). FIRST read `./sample-items.json` to lock onto the EXACT schema (field names, types, structure) and Korean editorial tone. Do NOT change the schema or field names.
+1. `./out/items.json` — the feed (schema below). FIRST read ONLY the first two items of `./sample-items.json` (`head -c 6000 ./sample-items.json`) to lock onto the EXACT schema (field names, types, structure) and Korean editorial tone — never load the whole file. Do NOT change the schema or field names.
 2. `./out/cycle.json` — a small run log (schema in the "Cycle log" section). A wrapper script merges token/cost data into it and publishes both files, so you only write `./out/`.
 
 ## Sources & how to read them (two passes — keep it lean)
@@ -25,14 +25,14 @@ Most of the cost of this job is reading full web pages into context, so read dee
 From each source consider roughly the top ~10–12 recent candidates (lean toward more from high-signal sources like Simon Willison and Hacker News).
 
 **How to fetch.** Your shell has network access — that is how you read the web.
-- **Feeds** (RSS/Atom/JSON, PASS 1) are already text: `curl -sSL --max-time 30 <url>`.
-- **Article pages** (HTML, PASS 2): `w3m -dump <url>` — it renders the page to plain text. Never read raw HTML into context: the markup dwarfs the prose and it is the single biggest waste of budget in this job. If `w3m` is missing, fall back to `curl -sSL --max-time 30 <url> | sed -e 's/<script[^>]*>.*<\/script>//g' -e 's/<[^>]*>//g'`.
+- **Feeds** (RSS/Atom/JSON, PASS 1): extract only titles/links/dates, never the full XML (feeds embed whole articles): `curl -sSL --max-time 30 <url> | grep -oE '<(title|link|pubDate|published|updated)[^>]*>(<!\[CDATA\[)?[^<]{0,200}' | head -80`. For JSON APIs, print only title/url/date fields.
+- **Article pages** (HTML, PASS 2): `w3m -dump -cols 100 <url> | head -c 12000` — plain text, hard-capped at 12k chars (the lede plus a few sections is enough for a card; never read past the cap). Never read raw HTML into context: the markup dwarfs the prose and it is the single biggest waste of budget in this job. If `w3m` is missing, fall back to `curl -sSL --max-time 30 <url> | sed -e 's/<script[^>]*>.*<\/script>//g' -e 's/<[^>]*>//g'`.
 - A fetch that fails or hangs is not worth retrying more than once — drop that candidate and move on. Never let one dead source stall the run.
 - Use the `web_search` tool only to FIND a url you don't have (e.g. a feed that moved), not to read a page you can fetch directly.
 
-**PASS 2 — select, then deep-read only survivors.** From the pooled candidates, drop off-topic ones (see "What to include") and merge same-event duplicates, leaving a shortlist of ~12–15 stories. ONLY THEN fetch the full article/source for each shortlisted story to write its card. Do NOT fetch full pages for candidates you already rejected. If a fetched page is too large, grep/read the relevant part in chunks rather than loading it whole.
+**PASS 2 — select, then deep-read only survivors.** From the pooled candidates, drop off-topic ones (see "What to include") and merge same-event duplicates, leaving a shortlist of ~8–10 stories. ONLY THEN fetch the full article/source for each shortlisted story to write its card. Do NOT fetch full pages for candidates you already rejected. If a fetched page is too large, grep/read the relevant part in chunks rather than loading it whole.
 
-Leanness comes from not deep-reading rejects — NOT from skimping on a card you publish. Every published card must still be written from its fully-read source with facts, dates, and numbers verified (see "Quantity & honesty").
+**Hard budget: at most 10 full-article reads per run, each capped at 12k chars as above.** Leanness comes from not deep-reading rejects — NOT from skimping on a card you publish. Every published card must still be written from its read (capped) source with facts, dates, and numbers verified (see "Quantity & honesty").
 
 ## What to include
 High-signal, PRACTICAL updates for builders across: LLM products & APIs (OpenAI, Anthropic/Claude, Google, Meta, open-weight models), LLM agents & agent frameworks, open-source AI libraries, Python ecosystem/language/packaging, vector databases, MLOps & model serving, data engineering, Kubernetes/infra for AI. EXCLUDE: pure funding rounds, generic hype, consumer fluff, marketing with no substance.
@@ -45,7 +45,7 @@ Judge items by SEMANTIC similarity. If multiple sources cover the same underlyin
 You only need to dedup WITHIN this run's stories — a downstream step (`vec.js`) handles cross-DAY dedup against the last ~2 weeks of already-published items, which you can't see. So don't try to guess what ran before; just collect today's best stories and merge same-event duplicates among them.
 
 ## Quantity & honesty
-Aim for 12–15 items on a normal day. On a genuinely quiet day, publish fewer (even 3–5) rather than padding — the site shows a graceful empty state, so prefer quality. Only include items you actually verified from fetched content; never invent headlines, dates, or numbers. Hedge any unverified claim in the summary.
+Aim for 8–10 items on a normal day. On a genuinely quiet day, publish fewer (even 3–5) rather than padding — the site shows a graceful empty state, so prefer quality. Only include items you actually verified from fetched content; never invent headlines, dates, or numbers. Hedge any unverified claim in the summary.
 
 ## Schema (match ./sample-items.json exactly)
 Top level: `generated_at` (ISO8601 with +09:00 — the runner overwrites this with the real publish time, so an approximate value is fine), `source_count` (item count), `schema_version`: 2, `items`: array.
